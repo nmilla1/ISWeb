@@ -1,0 +1,52 @@
+body {
+    font-family: Papyrus, Georgia, 'Times New Roman', Times, serif;
+    background-color: rgb(255, 255, 255);
+    Color: black;
+    
+
+    a {
+        color: black;
+    }
+    h1,
+    h2 {
+        text-align: center;
+    }
+    background-image: url(https://images.bigbadtoystore.com/images/p/full/2023/03/f97847d4-ac7e-4166-ad47-1118676bbbcb.jpg);
+    background-repeat: none;
+    background-size: cover;
+}
+
+img {
+    border: 5px dashed blue;
+    padding: 5px;
+    height: 250px;
+    /* display: block; */
+}
+
+.common_header {
+    font-family: chiller;
+    color: hotpink;
+    border: 5px dashed red;
+    font-size: 400% xx-large;
+    font-weight: bolder;
+    background-color: blue;
+}
+
+.common_header:hover {
+    font-size: 150%;
+    color: red;
+    border: 5px solid skyblue;
+}
+
+li {
+    width: fit-content;
+}
+
+li:hover {
+    text-decoration: underline;
+    background-color: darkgray;
+}
+.footer{
+    position: fixed;
+    color: black;
+}

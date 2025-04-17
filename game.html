@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fish Eat Fish - Expanding World</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a2e; /* Darker background for neon */
+            margin: 0;
+            font-family: 'Press Start 2P', cursive;
+            color: #e0e0e0; /* Light grey text */
+            overflow: hidden; /* Prevent scrollbars */
+            flex-direction: column; /* Stack elements vertically */
+        }
+        #gameContainer {
+            position: relative; /* For positioning messages */
+            /* Fixed container size, canvas inside handles view */
+            width: 80vw; /* Use viewport units for responsiveness */
+            height: 60vh;
+            max-width: 1000px; /* Max size */
+            max-height: 750px;
+            min-width: 600px; /* Min size */
+            min-height: 400px;
+            border: 5px solid #4a4a8e; /* Adjusted border color */
+            border-radius: 15px;
+            overflow: hidden; /* Crucial: Clips the world to the canvas view */
+            box-shadow: 0 0 25px rgba(74, 74, 142, 0.7); /* Neon glow effect */
+            margin-bottom: 20px; /* Space for UI below */
+        }
+        canvas {
+            display: block; /* Remove extra space below canvas */
+            background-color: #0f3460; /* Dark blue water */
+            width: 100%; /* Canvas fills container */
+            height: 100%;
+        }
+        #uiContainer {
+            /* Position UI below the game container */
+            text-align: center;
+        }
+        #scoreBoard {
+            font-size: 1.5em; /* Adjust size as needed */
+            margin-bottom: 15px;
+            text-shadow: 0 0 5px #ffffff, 0 0 10px #ffffff; /* Neon text glow */
+        }
+        #messageBox {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.8em;
+            display: none; /* Hidden by default */
+            z-index: 10;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 15px #ffffff; /* White glow */
+        }
+        button {
+            font-family: 'Press Start 2P', cursive;
+            padding: 15px 30px;
+            font-size: 1em;
+            cursor: pointer;
+            /* Neon button style */
+            background-color: #1f4068;
+            color: #e0f7fa;
+            border: 2px solid #5dbcd2;
+            border-radius: 8px;
+            box-shadow: 0 0 10px #5dbcd2, 0 0 5px #ffffff inset;
+            transition: all 0.2s ease;
+            text-shadow: 0 0 3px #e0f7fa;
+        }
+        button:hover {
+            background-color: #2a5a8a;
+            color: #ffffff;
+            box-shadow: 0 0 15px #5dbcd2, 0 0 10px #ffffff inset, 0 0 5px #5dbcd2;
+            transform: translateY(-2px);
+        }
+         button:active {
+             transform: translateY(1px);
+             box-shadow: 0 0 5px #5dbcd2, 0 0 3px #ffffff inset;
+         }
+        /* Style for the message box button */
+        #messageBox button {
+            margin-top: 20px;
+            font-size: 0.8em;
+            padding: 10px 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="messageBox">
+            <p id="messageText"></p>
+            <button id="restartButton">Restart</button>
+        </div>
+    </div>
+
+    <div id="uiContainer">
+        <div id="scoreBoard">Score: <span id="score">0</span> | Size: <span id="playerSizeDisplay">20</span></div>
+        <button id="startButton">Start Game</button>
+        <br><br>
+        <a href="root.html">Above all Landscaping</a> <br> <br>
+        <a href="index.html">Scratch page</a>
+    </div>
+
+    <script>
+        // --- Game Setup ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameContainer = document.getElementById('gameContainer');
+        const scoreElement = document.getElementById('score');
+        const playerSizeDisplayElement = document.getElementById('playerSizeDisplay');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const restartButton = document.getElementById('restartButton');
+        const startButton = document.getElementById('startButton');
+
+        // --- Canvas and World Dimensions ---
+        let canvasWidth;
+        let canvasHeight;
+        let worldWidth;
+        let worldHeight;
+
+        // Function to resize canvas and update dimensions
+        function resizeCanvas() {
+            canvasWidth = gameContainer.clientWidth;
+            canvasHeight = gameContainer.clientHeight;
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            // Optionally adjust world size based on new canvas size if needed
+            // worldWidth = canvasWidth * (1.5 + (player ? player.size / 100 : 0));
+            // worldHeight = canvasHeight * (1.5 + (player ? player.size / 100 : 0));
+        }
+
+        // Initial setup and resize listener
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial size setup
+
+        // --- Game State Variables ---
+        let player;
+        let npcs = [];
+        let score = 0;
+        // Store both canvas and world mouse coordinates
+        let mouse = { x: canvasWidth / 2, y: canvasHeight / 2, worldX: 0, worldY: 0 };
+        let gameRunning = false;
+        let animationFrameId;
+        let npcSpawnInterval;
+
+        // --- Camera ---
+        let camera = {
+            x: 0, // Top-left corner of the camera view in world coordinates
+            y: 0,
+            targetX: 0, // Where the camera wants to be
+            targetY: 0,
+            smoothing: 0.08 // How quickly the camera follows (lower = smoother)
+        };
+
+        // --- Fish Definitions (Added Crab, Octopus) ---
+        const FISH_TYPES = {
+            PLAYER: { baseSize: 20, color: '#39FF14', speed: 4 }, // Neon Green
+            SHRIMP: { baseSize: 5, color: '#FF10F0', speed: 1.5, points: 5 }, // Neon Pink
+            CRAB:   { baseSize: 15, color: '#FF5733', speed: 1.2, points: 8 }, // Neon Orange-Red
+            TUNA:   { baseSize: 20, color: '#1F51FF', speed: 2.5, points: 10 }, // Electric Blue
+            OCTOPUS:{ baseSize: 30, color: '#C71585', speed: 2.2, points: 15 }, // Medium Violet Red (Neon-ish)
+            SHARK:  { baseSize: 50, color: '#FFF01F', speed: 3, points: 25 }, // Neon Yellow
+            WHALE:  { baseSize: 100, color: '#FF00FF', speed: 1.5, points: 50 } // Hot Pink/Magenta
+        };
+
+        // --- Classes ---
+        class Fish {
+            constructor(x, y, type) {
+                this.x = x; // World coordinates
+                this.y = y; // World coordinates
+                this.type = type;
+                this.size = type.baseSize;
+                this.color = type.color;
+                this.speed = type.speed;
+                this.targetX = x; // World coordinates for NPC target
+                this.targetY = y;
+                this.isPlayer = (type === FISH_TYPES.PLAYER);
+                this.direction = 1;
+            }
+
+            draw() {
+                // Calculate position relative to camera
+                const drawX = this.x - camera.x;
+                const drawY = this.y - camera.y;
+                const radius = this.size / 2;
+
+                // --- Culling: Only draw if visible on screen ---
+                if (drawX + radius < 0 || drawX - radius > canvasWidth ||
+                    drawY + radius < 0 || drawY - radius > canvasHeight) {
+                    return; // Don't draw if completely off-screen
+                }
+
+                // Draw fish as a neon circle
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                // Add outline
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Add eye
+                ctx.beginPath();
+                const eyeOffsetX = this.direction * radius * 0.4;
+                const eyeOffsetY = -radius * 0.2;
+                const eyeRadius = Math.max(1, radius * 0.15);
+                ctx.arc(drawX + eyeOffsetX, drawY + eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                ctx.beginPath();
+                const pupilRadius = Math.max(0.5, eyeRadius * 0.6);
+                ctx.arc(drawX + eyeOffsetX + (this.direction * eyeRadius * 0.3), drawY + eyeOffsetY, pupilRadius, 0, Math.PI * 2);
+                ctx.fillStyle = 'black';
+                ctx.fill();
+            }
+
+            update() {
+                 if (this.isPlayer) {
+                    // Player follows world mouse coordinates smoothly
+                    const dx = mouse.worldX - this.x;
+                    const dy = mouse.worldY - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const desiredSpeed = this.speed * (distance / 100 + 0.1);
+
+                    // Only move if mouse is a bit away from the center of the fish
+                    if (distance > this.size / 4) {
+                        const moveX = (dx / distance) * Math.min(desiredSpeed, distance);
+                        const moveY = (dy / distance) * Math.min(desiredSpeed, distance);
+                        this.x += moveX;
+                        this.y += moveY;
+
+                        if (moveX > 0.1) this.direction = 1;
+                        else if (moveX < -0.1) this.direction = -1;
+                    }
+                } else {
+                    // NPC movement logic (uses world coordinates)
+                    const dx = this.targetX - this.x;
+                    const dy = this.targetY - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < this.speed * 5 || Math.random() < 0.01) {
+                        // Pick new target within world bounds
+                        this.targetX = Math.random() * (worldWidth - this.size) + this.size / 2;
+                        this.targetY = Math.random() * (worldHeight - this.size) + this.size / 2;
+                    } else {
+                        const moveX = (dx / distance) * this.speed;
+                        const moveY = (dy / distance) * this.speed;
+                        this.x += moveX;
+                        this.y += moveY;
+
+                        if (moveX > 0.1) this.direction = 1;
+                        else if (moveX < -0.1) this.direction = -1;
+                    }
+                }
+
+                // Keep fish within WORLD bounds
+                const radius = this.size / 2;
+                this.x = Math.max(radius, Math.min(worldWidth - radius, this.x));
+                this.y = Math.max(radius, Math.min(worldHeight - radius, this.y));
+            }
+
+            grow(amount) {
+                this.size += amount;
+                playerSizeDisplayElement.textContent = Math.round(this.size);
+
+                // --- Grow the world based on player size ---
+                const worldSizeFactor = 1.5 + this.size / 100; // Adjust scaling factor as needed
+                worldWidth = canvasWidth * worldSizeFactor;
+                worldHeight = canvasHeight * worldSizeFactor;
+            }
+        }
+
+        // --- Game Functions ---
+
+        function updateCamera() {
+            if (!player) return;
+
+            // Target camera position to center the player
+            camera.targetX = player.x - canvasWidth / 2;
+            camera.targetY = player.y - canvasHeight / 2;
+
+            // Clamp target position so camera doesn't go outside world bounds
+            camera.targetX = Math.max(0, Math.min(worldWidth - canvasWidth, camera.targetX));
+            camera.targetY = Math.max(0, Math.min(worldHeight - canvasHeight, camera.targetY));
+
+            // Smoothly move camera towards target
+            camera.x += (camera.targetX - camera.x) * camera.smoothing;
+            camera.y += (camera.targetY - camera.y) * camera.smoothing;
+
+            // Ensure camera coordinates are integers to prevent jittery rendering
+            camera.x = Math.round(camera.x);
+            camera.y = Math.round(camera.y);
+        }
+
+        function spawnNpc() {
+            if (!gameRunning || !player || npcs.length > 40) return; // Increased NPC limit slightly
+
+            const types = [FISH_TYPES.SHRIMP, FISH_TYPES.CRAB, FISH_TYPES.TUNA, FISH_TYPES.OCTOPUS, FISH_TYPES.SHARK, FISH_TYPES.WHALE];
+            const playerSizeFactor = Math.min(player.size / 150, 1); // Adjusted scaling for size factor
+
+            // Weighted random index - favors smaller fish early on
+            const baseIndex = Math.floor(Math.random() * 2); // Shrimp or Crab
+            const bonusIndex = Math.floor(Math.random() * (types.length - baseIndex) * playerSizeFactor * playerSizeFactor);
+            const typeIndex = Math.min(baseIndex + bonusIndex, types.length - 1);
+            const type = types[typeIndex];
+
+            // Spawn somewhere in the world, preferably off-screen from current view
+            let x, y;
+            const spawnMargin = 100; // Spawn further away
+            const side = Math.random();
+
+            if (side < 0.25) { // Left of camera
+                x = camera.x - spawnMargin;
+                y = camera.y + Math.random() * canvasHeight;
+            } else if (side < 0.5) { // Right of camera
+                x = camera.x + canvasWidth + spawnMargin;
+                y = camera.y + Math.random() * canvasHeight;
+            } else if (side < 0.75) { // Top of camera
+                x = camera.x + Math.random() * canvasWidth;
+                y = camera.y - spawnMargin;
+            } else { // Bottom of camera
+                x = camera.x + Math.random() * canvasWidth;
+                y = camera.y + canvasHeight + spawnMargin;
+            }
+
+            // Clamp spawn position to world bounds
+            x = Math.max(type.baseSize / 2, Math.min(worldWidth - type.baseSize / 2, x));
+            y = Math.max(type.baseSize / 2, Math.min(worldHeight - type.baseSize / 2, y));
+
+            npcs.push(new Fish(x, y, type));
+        }
+
+        function checkCollisions() {
+            if (!player) return;
+
+            for (let i = npcs.length - 1; i >= 0; i--) {
+                const npc = npcs[i];
+                // Use world coordinates for collision check
+                const dx = player.x - npc.x;
+                const dy = player.y - npc.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const collisionDistance = (player.size / 2) + (npc.size / 2);
+
+                if (distance < collisionDistance) {
+                    if (player.size > npc.size) {
+                        player.grow(npc.size * 0.1);
+                        score += npc.type.points;
+                        scoreElement.textContent = score;
+                        npcs.splice(i, 1);
+                    } else {
+                        gameOver();
+                        return;
+                    }
+                }
+            }
+        }
+
+        function updateGame() {
+            if (!player) return;
+            player.update();
+            npcs.forEach(npc => npc.update());
+            checkCollisions();
+            updateCamera(); // Update camera after player moves
+        }
+
+        function drawBackground() {
+            ctx.save(); // Save context state
+            ctx.fillStyle = '#0f3460'; // Base water color
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // Draw a moving grid
+            const gridSize = 50;
+            ctx.strokeStyle = 'rgba(173, 216, 230, 0.1)'; // Light blue, faint grid lines
+            ctx.lineWidth = 1;
+
+            // Calculate starting grid lines based on camera position
+            const startX = - (camera.x % gridSize);
+            const startY = - (camera.y % gridSize);
+
+            // Draw vertical lines
+            for (let x = startX; x < canvasWidth; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvasHeight);
+                ctx.stroke();
+            }
+
+            // Draw horizontal lines
+            for (let y = startY; y < canvasHeight; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvasWidth, y);
+                ctx.stroke();
+            }
+            ctx.restore(); // Restore context state
+        }
+
+
+        function drawGame() {
+            // Clear canvas (or draw background)
+            // ctx.clearRect(0, 0, canvasWidth, canvasHeight); // Use background instead
+            drawBackground();
+
+            // Draw NPCs
+            npcs.forEach(npc => npc.draw());
+
+            // Draw player (if exists)
+            if (player) {
+                player.draw();
+            }
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            updateGame();
+            drawGame();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            if (gameRunning) return;
+
+            resizeCanvas(); // Ensure dimensions are current
+
+            score = 0;
+            npcs = [];
+            // Initial world size based on starting canvas size
+            worldWidth = canvasWidth * 1.5;
+            worldHeight = canvasHeight * 1.5;
+
+            // Create player at the center of the initial world view
+            const startX = worldWidth / 2;
+            const startY = worldHeight / 2;
+            player = new Fish(startX, startY, FISH_TYPES.PLAYER);
+
+            // Initialize camera centered on player
+            camera.x = player.x - canvasWidth / 2;
+            camera.y = player.y - canvasHeight / 2;
+            camera.targetX = camera.x;
+            camera.targetY = camera.y;
+            // Clamp initial camera position
+            camera.x = Math.max(0, Math.min(worldWidth - canvasWidth, camera.x));
+            camera.y = Math.max(0, Math.min(worldHeight - canvasHeight, camera.y));
+
+
+            // Update UI
+            scoreElement.textContent = score;
+            playerSizeDisplayElement.textContent = Math.round(player.size);
+            messageBox.style.display = 'none';
+            startButton.style.display = 'none';
+            gameRunning = true;
+
+            clearInterval(npcSpawnInterval);
+            npcSpawnInterval = setInterval(spawnNpc, 1200); // Spawn a bit faster
+            for(let i=0; i<10; i++) spawnNpc(); // Spawn initial batch
+
+            cancelAnimationFrame(animationFrameId);
+            gameLoop();
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            clearInterval(npcSpawnInterval);
+            messageText.textContent = `Game Over! Final Score: ${score}`;
+            messageBox.style.display = 'block';
+            startButton.style.display = 'block';
+        }
+
+        // --- Event Listeners ---
+        canvas.addEventListener('mousemove', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            // Canvas coordinates
+            mouse.x = event.clientX - rect.left;
+            mouse.y = event.clientY - rect.top;
+            // World coordinates
+            mouse.worldX = mouse.x + camera.x;
+            mouse.worldY = mouse.y + camera.y;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+             // Stop player moving towards mouse when cursor leaves canvas
+             if (player) {
+                 mouse.worldX = player.x;
+                 mouse.worldY = player.y;
+             }
+        });
+
+        restartButton.addEventListener('click', startGame);
+        startButton.addEventListener('click', startGame);
+
+        // --- Initial Setup ---
+        function drawInitialScreen() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            drawBackground(); // Draw background on initial screen too
+            ctx.fillStyle = '#e0e0e0';
+            ctx.font = "30px 'Press Start 2P'";
+            ctx.textAlign = 'center';
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 10;
+            ctx.fillText("Fish Eat Fish!", canvasWidth / 2, canvasHeight / 2 - 60);
+            ctx.shadowBlur = 0;
+
+            ctx.font = "15px 'Press Start 2P'";
+            ctx.fillText("Move mouse to control your fish", canvasWidth / 2, canvasHeight / 2);
+            ctx.fillText("Eat smaller fish, avoid bigger ones!", canvasWidth / 2, canvasHeight / 2 + 30);
+            ctx.fillText("The world expands as you grow!", canvasWidth / 2, canvasHeight / 2 + 60);
+            // ctx.fillText("Click Start Game below!", canvasWidth / 2, canvasHeight / 2 + 90); // Button is clearly visible
+        }
+        // Draw initial state
+        drawInitialScreen();
+
+    </script>
+
+</body>
+</html>
